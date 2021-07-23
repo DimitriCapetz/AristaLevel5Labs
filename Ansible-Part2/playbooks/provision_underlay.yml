@@ -16,3 +16,9 @@
   - name: Upload config
     eos_config:
       src: "{{lookup('env','PWD')}}/configs/{{inventory_hostname}}_underlay.cfg"
+- hosts: DCI
+  gather_facts: no
+  tasks:
+  - name: Upload config
+    eos_config:
+      src: "{{lookup('env','PWD')}}/configs/{{inventory_hostname}}_underlay.cfg"
