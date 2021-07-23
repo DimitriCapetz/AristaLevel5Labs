@@ -1,0 +1,87 @@
+service routing protocols model multi-agent
+!
+{% for interface in underlay[inventory_hostname]['interfaces'] %}
+interface {{ interface }}
+{% if 'Ethernet' in interface %}
+   no switchport
+   mtu 9214
+{% endif%}
+   ip address {{ underlay[inventory_hostname]['interfaces'][interface]['ipv4']}}/{{ underlay[inventory_hostname]['interfaces'][interface]['mask']}}
+!
+{% endfor %}
+ip prefix-list LOOPBACK
+{% if inventory_hostname in groups['DC1'] %}
+   seq 10 permit 192.168.101.0/24 eq 32
+   seq 20 permit 192.168.102.0/24 eq 32
+{% else %}
+   seq 10 permit 192.168.201.0/24 eq 32
+   seq 20 permit 192.168.202.0/24 eq 32
+{% endif %}
+!
+route-map LOOPBACK permit 10
+   match ip address prefix-list LOOPBACK
+!
+{% if 'spine' in inventory_hostname %}
+peer-filter LEAF-AS-RANGE
+   10 match as-range 65000-65535 result accept
+!
+{% endif %}
+router bgp {{ underlay[inventory_hostname]['bgp']['asn'] }}
+   router-id {{ underlay[inventory_hostname]['interfaces']['loopback0']['ipv4']}}
+   no bgp default ipv4-unicast
+   maximum-paths 3
+   distance bgp 20 200 200
+{% if inventory_hostname in groups['spines_DC1'] %}
+   bgp listen range 192.168.103.0/24 peer-group LEAF_Underlay peer-filter LEAF-AS-RANGE
+{% elif inventory_hostname in groups['spines_DC2'] %}
+   bgp listen range 192.168.203.0/24 peer-group LEAF_Underlay peer-filter LEAF-AS-RANGE
+{% endif %}
+{% if 'spine' in inventory_hostname %}
+   neighbor LEAF_Underlay peer group
+   neighbor LEAF_Underlay send-community standard extended
+   neighbor LEAF_Underlay maximum-routes 12000
+{% endif %}
+{% if 'border' in inventory_hostname %}
+   neighbor DCI peer group
+   neighbor DCI remote-as 65000
+   neighbor DCI send-community standard extended
+   neighbor DCI maximum-routes 12000
+{% endif %}
+{% if 'leaf' in inventory_hostname %}
+   neighbor LEAF_Peer peer group
+   neighbor LEAF_Peer remote-as {{ underlay[inventory_hostname]['bgp']['asn'] }}
+   neighbor LEAF_Peer next-hop-self
+   neighbor LEAF_Peer maximum-routes 12000
+   neighbor SPINE_Underlay peer group
+{% if inventory_hostname in groups['leafs_DC1'] %}
+   neighbor SPINE_Underlay remote-as 65100
+{% elif inventory_hostname in groups['leafs_DC2'] %}
+   neighbor SPINE_Underlay remote-as 65200
+{% endif %}
+   neighbor SPINE_Underlay send-community standard extended
+   neighbor SPINE_Underlay maximum-routes 12000
+{% if 'border' in inventory_hostname %}
+   neighbor {{ underlay[inventory_hostname]['bgp']['dci-peers'] }} peer group DCI
+{% endif %}
+{% for peer in underlay[inventory_hostname]['bgp']['spine-peers'] %}
+   neighbor {{ peer }} peer group SPINE_Underlay
+{% endfor %}
+{% if inventory_hostname in groups['MLAG_Left'] %}
+   neighbor 192.168.255.2 peer group LEAF_Peer
+{% else %}
+   neighbor 192.168.255.1 peer group LEAF_Peer
+{% endif %}
+{% endif %}
+   redistribute connected route-map LOOPBACK
+   !
+   address-family ipv4
+{% if 'border' in inventory_hostname %}
+      neighbor DCI activate
+      neighbor LEAF_Peer activate
+      neighbor SPINE_Underlay activate
+{% elif 'leaf' in inventory_hostname %}
+      neighbor LEAF_Peer activate
+      neighbor SPINE_Underlay activate
+{% else %}
+      neighbor LEAF_Underlay activate
+{% endif %}
