@@ -5,7 +5,7 @@
   - name: Create template
     template:
       src: "{{lookup('env','PWD')}}/templates/vlans.j2"
-      dest: "{{lookup('env','PWD')}}/configs/vlans.cfg"
+      dest: "{{lookup('env','PWD')}}/configs/{{inventory_hostname}}_vlans.cfg"
   - name: Upload config
     eos_config:
-      src: "{{lookup('env','PWD')}}/configs/vlans.cfg"
+      src: "{{lookup('env','PWD')}}/configs/{{inventory_hostname}}_vlans.cfg"
